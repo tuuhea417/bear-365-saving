@@ -1,10 +1,3 @@
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import './index.css';
-import App from './App';
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(<App />);
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { initializeApp } from 'firebase/app';
 import { 
@@ -13,21 +6,17 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  signInAnonymously,
-  signInWithCustomToken
+  signInAnonymously
 } from 'firebase/auth';
 import { 
   getFirestore, 
   doc, 
   setDoc, 
-  getDoc, 
   onSnapshot, 
   collection 
 } from 'firebase/firestore';
 import { 
   Heart, 
-  Target, 
-  CreditCard, 
   Settings, 
   Plus, 
   Trash2, 
@@ -44,13 +33,32 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// --- Firebase Configuration & Initialization ---
-// 使用系統環境提供的變數來初始化，確保在預覽環境中不會報錯
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// --- Firebase Configuration ---
+// 【重要】請將下方這段替換成您在 Firebase Console 複製的那一段
+const firebaseConfig = {
+  apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
+  authDomain: "bear365-e29e0.firebaseapp.com",
+  projectId: "bear365-e29e0",
+  storageBucket: "bear365-e29e0.firebasestorage.app",
+  messagingSenderId: "437697858004",
+  appId: "1:437697858004:web:bde1d75d18232ba1c56e41",
+  measurementId: "G-QYY8JFLL7J"
+};
+};
+
+// Initialize Firebase
+// 這裡會嘗試初始化，如果失敗會在 Console 顯示錯誤，方便除錯
+let app, auth, db;
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (e) {
+  console.error("Firebase 初始化失敗，請檢查 firebaseConfig 是否填寫正確。", e);
+}
+
+// 預設 App ID，無需更改
+const appId = "bear-365-app";
 
 // --- Bible Verses (New Testament) ---
 const BIBLE_VERSES = [
@@ -201,30 +209,25 @@ export default function App() {
 
   // --- Auth & Data Loading ---
   
-  // 1. Initial Authentication
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth Error:", error);
-      }
-    };
-    initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, (u) => {
+    // 監聽登入狀態
+    const unsubscribe = onAuthStateChanged(auth, async (u) => {
       setUser(u);
+      if (!u) {
+        // 如果未登入，嘗試匿名登入（為了能寫入資料庫）
+        try {
+          await signInAnonymously(auth);
+        } catch (e) {
+          console.error("Anonymous auth failed", e);
+        }
+      }
     });
     return () => unsubscribe();
   }, []);
 
   // 2. Data Sync with Firestore (Cloud Storage)
   useEffect(() => {
-    if (!user) return;
+    if (!user || !db) return;
 
     // References to Firestore collections
     const savingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'savings');
@@ -235,15 +238,15 @@ export default function App() {
     // Load initial data from Firestore (or listen for changes)
     const unsubSavings = onSnapshot(savingsRef, (doc) => {
       if (doc.exists()) setSavings(doc.data().data || {});
-    });
+    }, (error) => console.log("Sync error savings:", error));
 
     const unsubExpenses = onSnapshot(expensesRef, (doc) => {
       if (doc.exists()) setExpenses(doc.data().data || []);
-    });
+    }, (error) => console.log("Sync error expenses:", error));
 
     const unsubWishlist = onSnapshot(wishlistRef, (doc) => {
       if (doc.exists()) setWishlist(doc.data().data || []);
-    });
+    }, (error) => console.log("Sync error wishlist:", error));
 
     const unsubSettings = onSnapshot(settingsRef, (doc) => {
       if (doc.exists()) {
@@ -251,7 +254,7 @@ export default function App() {
         if (data.goal) setGoal(data.goal);
         if (data.currency) setCurrency(data.currency);
       }
-    });
+    }, (error) => console.log("Sync error settings:", error));
 
     return () => {
       unsubSavings();
@@ -262,7 +265,6 @@ export default function App() {
   }, [user]);
 
   // 3. Save Data to Firestore whenever state changes
-  // Debounce saving to prevent too many writes
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -270,7 +272,7 @@ export default function App() {
       isFirstRender.current = false;
       return;
     }
-    if (!user) return;
+    if (!user || !db) return;
 
     const saveData = async () => {
       try {
@@ -341,24 +343,17 @@ export default function App() {
   // --- Actions ---
 
   const handleGoogleLogin = async () => {
-    // Check if we are in the preview environment (restricted API key)
-    // In the real deployed app, this would work if configured correctly.
-    // In this preview, we show a helpful message.
-    alert("預覽模式說明：\n此預覽環境使用測試帳號 (Guest) 進行自動同步。\n\n若您部署到 Vercel 並設定了自己的 Firebase，Google 登入功能將會正常啟用！");
-    
-    // Attempt login anyway just in case it's a real env, but catch error
     try {
       const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.log("Preview mode google login skipped");
+      console.error("Login failed", error);
+      alert("登入失敗，請檢查 Firebase Console 的 Authentication 設定是否已啟用 Google 登入。");
     }
   };
 
   const handleLogout = async () => {
     await signOut(auth);
-    // Re-login anonymously to keep app working
-    await signInAnonymously(auth);
   };
 
   const changeMonth = (delta) => {
@@ -560,13 +555,11 @@ export default function App() {
            </div>
            {user ? (
              <div className="flex items-center gap-2">
-               {user.isAnonymous && <span className="text-[10px] bg-stone-100 text-stone-400 px-2 py-1 rounded-full">Preview Mode</span>}
+               {user.isAnonymous && <span className="text-[10px] bg-stone-100 text-stone-400 px-2 py-1 rounded-full">Guest</span>}
                <img src={user.photoURL || "https://ui-avatars.com/api/?name=User&background=random"} alt="User" className="w-10 h-10 rounded-full border-2 border-amber-100" />
              </div>
            ) : (
-             <button onClick={handleGoogleLogin} className="text-xs bg-stone-800 text-white px-3 py-1.5 rounded-full">
-               Login
-             </button>
+             <div className="text-xs text-stone-400">Loading...</div>
            )}
         </div>
 
@@ -830,7 +823,7 @@ export default function App() {
                      {user.isAnonymous && (
                        <div className="bg-amber-50 border border-amber-100 rounded-xl p-3 text-xs text-amber-800 flex items-start gap-2">
                          <AlertCircle size={14} className="mt-0.5 flex-shrink-0" />
-                         目前為預覽訪客模式。部署到正式環境並設定 Firebase 後即可使用 Google 登入。
+                         目前為訪客模式。請登入 Google 帳號以確保資料永久保存。
                        </div>
                      )}
                    </div>
