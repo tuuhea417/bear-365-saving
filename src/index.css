@@ -8,5 +8,19 @@ body {
     'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
     sans-serif;
   background-color: #F5F5F0;
-  -webkit-tap-highlight-color: transparent; /* 移除點擊時的藍色高光 */
+  -webkit-tap-highlight-color: transparent;
 }
+
+**2. 檢查 `src/index.js`**
+必須有一行導入 CSS 的指令：
+```javascript
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import './index.css';  // <--- 這一行非常重要！沒有它樣式就不會載入
+import App from './App';
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+
+**總結原因：**
+您目前看到的「嚴重跑版」，是因為瀏覽器看不懂 `text-amber-900` 這種 Tailwind 語法。一旦您補上 `tailwind.config.js`，Vercel 就會知道該如何翻譯這些語法，您的北歐風設計就會瞬間出現了！
