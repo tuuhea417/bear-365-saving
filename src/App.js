@@ -6,8 +6,7 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  signInAnonymously,
-  signInWithCustomToken
+  signInAnonymously
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -35,8 +34,7 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// 【修復步驟】：請不要整段覆蓋！
-// 請「只」把雙引號 "" 裡面的內容，換成您 Firebase 的資料。
+// 【重要步驟】請將下方雙引號 "" 內的文字，換成您在 Firebase Console 複製的資料
 const firebaseConfig = {
   apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
   authDomain: "bear365-e29e0.firebaseapp.com",
@@ -54,10 +52,10 @@ try {
   auth = getAuth(app);
   db = getFirestore(app);
 } catch (e) {
-  console.error("Firebase 初始化失敗", e);
+  console.error("Firebase 初始化失敗，請檢查 firebaseConfig 是否填寫正確。", e);
 }
 
-// App ID
+// 預設 App ID
 const appId = "bear-365-app";
 
 // --- Bible Verses (New Testament) ---
@@ -473,6 +471,63 @@ export default function App() {
   const getRandomVerse = () => {
     const randomIndex = Math.floor(Math.random() * BIBLE_VERSES.length);
     setBibleVerse(BIBLE_VERSES[randomIndex]);
+  };
+
+  // --- Render Helpers ---
+  
+  const renderCalendar = (type) => {
+    const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+    const startDay = getFirstDayOfMonth(currentYear, currentMonth); // 0 = Sun
+    const days = [];
+    
+    for (let i = 0; i < startDay; i++) {
+      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
+    }
+
+    const todayStr = formatDateKey(new Date());
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const date = new Date(currentYear, currentMonth, i);
+      const dateKey = formatDateKey(date);
+      const isSaved = savings[dateKey];
+      const hasExpense = expenses.some(e => e.date === dateKey);
+      const isToday = dateKey === todayStr;
+      
+      let statusClass = "bg-stone-50 text-stone-600 hover:bg-stone-100";
+      
+      if (type === 'savings') {
+        if (isSaved) statusClass = "bg-amber-700 text-white shadow-md"; 
+      } else {
+        if (hasExpense) statusClass = "bg-stone-200 text-stone-800 border-2 border-stone-300"; 
+      }
+
+      if (isToday) {
+        statusClass += " ring-2 ring-offset-2 ring-red-400"; 
+      }
+
+      days.push(
+        <button 
+          key={i} 
+          onClick={() => handleDateClick(i)}
+          className={`aspect-square rounded-2xl flex flex-col items-center justify-center text-sm font-medium transition-all duration-200 ${statusClass}`}
+        >
+          <span>{i}</span>
+          {type === 'savings' && isSaved && <span className="text-[9px] mt-0.5 opacity-80">✓</span>}
+          {type === 'expenses' && hasExpense && (
+             <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1"></div>
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-7 gap-2 mb-6">
+        {['일', '월', '화', '수', '목', '금', '토'].map(d => (
+          <div key={d} className="text-center text-xs font-bold text-stone-400 py-2">{d}</div>
+        ))}
+        {days}
+      </div>
+    );
   };
 
   // --- Render ---
