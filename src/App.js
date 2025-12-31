@@ -6,7 +6,8 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  signInAnonymously
+  signInAnonymously,
+  signInWithCustomToken
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -34,30 +35,29 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// 【重要】請將下方這段替換成您在 Firebase Console 複製的那一段
+// 【修復步驟】：請不要整段覆蓋！
+// 請「只」把雙引號 "" 裡面的內容，換成您 Firebase 的資料。
 const firebaseConfig = {
-  apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
-  authDomain: "bear365-e29e0.firebaseapp.com",
-  projectId: "bear365-e29e0",
-  storageBucket: "bear365-e29e0.firebasestorage.app",
-  messagingSenderId: "437697858004",
-  appId: "1:437697858004:web:bde1d75d18232ba1c56e41",
-  measurementId: "G-QYY8JFLL7J"
-};
+  apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
+  authDomain: "bear365-e29e0.firebaseapp.com",
+  projectId: "bear365-e29e0",
+  storageBucket: "bear365-e29e0.firebasestorage.app",
+  messagingSenderId: "437697858004",
+  appId: "1:437697858004:web:bde1d75d18232ba1c56e41",
+  measurementId: "G-QYY8JFLL7J" 
 };
 
 // Initialize Firebase
-// 這裡會嘗試初始化，如果失敗會在 Console 顯示錯誤，方便除錯
 let app, auth, db;
 try {
   app = initializeApp(firebaseConfig);
   auth = getAuth(app);
   db = getFirestore(app);
 } catch (e) {
-  console.error("Firebase 初始化失敗，請檢查 firebaseConfig 是否填寫正確。", e);
+  console.error("Firebase 初始化失敗", e);
 }
 
-// 預設 App ID，無需更改
+// App ID
 const appId = "bear-365-app";
 
 // --- Bible Verses (New Testament) ---
@@ -190,10 +190,10 @@ export default function App() {
   const [currency, setCurrency] = useState('TWD');
   
   // Data State
-  const [savings, setSavings] = useState({}); // { "2024-01-01": 500 }
+  const [savings, setSavings] = useState({});
   const [goal, setGoal] = useState(100000);
   const [wishlist, setWishlist] = useState([]);
-  const [expenses, setExpenses] = useState([]); // [{id, date, amount, title, type, method}]
+  const [expenses, setExpenses] = useState([]);
   const [bibleVerse, setBibleVerse] = useState(BIBLE_VERSES[0]);
 
   // Modals
@@ -208,7 +208,6 @@ export default function App() {
   const [tempWish, setTempWish] = useState({ name: '', price: '', platform: '', image: '' });
 
   // --- Auth & Data Loading ---
-  
   useEffect(() => {
     // 監聽登入狀態
     const unsubscribe = onAuthStateChanged(auth, async (u) => {
@@ -225,7 +224,7 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // 2. Data Sync with Firestore (Cloud Storage)
+  // 2. Data Sync with Firestore
   useEffect(() => {
     if (!user || !db) return;
 
@@ -235,7 +234,7 @@ export default function App() {
     const wishlistRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'wishlist');
     const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'settings');
 
-    // Load initial data from Firestore (or listen for changes)
+    // Load initial data
     const unsubSavings = onSnapshot(savingsRef, (doc) => {
       if (doc.exists()) setSavings(doc.data().data || {});
     }, (error) => console.log("Sync error savings:", error));
@@ -264,7 +263,7 @@ export default function App() {
     };
   }, [user]);
 
-  // 3. Save Data to Firestore whenever state changes
+  // 3. Save Data to Firestore
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -285,7 +284,7 @@ export default function App() {
       }
     };
 
-    const timeoutId = setTimeout(saveData, 1000); // Save after 1 second of inactivity
+    const timeoutId = setTimeout(saveData, 1000);
     return () => clearTimeout(timeoutId);
   }, [savings, expenses, wishlist, goal, currency, user]);
 
@@ -294,7 +293,6 @@ export default function App() {
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   
-  // Progress Calculations
   const yearSavings = useMemo(() => {
     return Object.entries(savings).reduce((acc, [dateStr, amount]) => {
       if (dateStr.startsWith(currentYear.toString())) {
@@ -310,7 +308,6 @@ export default function App() {
     return wishlist.reduce((acc, item) => acc + Number(item.price), 0);
   }, [wishlist]);
 
-  // Expense Calculations for Chart
   const dailyExpenses = useMemo(() => {
     if (!selectedDate) return [];
     const dateStr = formatDateKey(selectedDate);
@@ -386,7 +383,6 @@ export default function App() {
     }
   };
 
-  // Savings Logic
   const saveMoney = () => {
     if (!selectedDate) return;
     const key = formatDateKey(selectedDate);
@@ -400,7 +396,6 @@ export default function App() {
     setShowSavingsModal(false);
   };
 
-  // Wishlist Logic
   const addWishItem = () => {
     if (!tempWish.name || !tempWish.price) return;
     const newItem = {
@@ -428,7 +423,6 @@ export default function App() {
     }
   };
 
-  // Expense Logic
   const addExpense = () => {
     if (!selectedDate || !tempExpense.amount) return;
     const newExpense = {
@@ -447,7 +441,6 @@ export default function App() {
     setExpenses(expenses.filter(e => e.id !== id));
   };
 
-  // Export/Import Logic
   const exportData = () => {
     const data = {
       savings,
@@ -482,65 +475,7 @@ export default function App() {
     setBibleVerse(BIBLE_VERSES[randomIndex]);
   };
 
-  // --- Render Helpers ---
-
-  const renderCalendar = (type) => {
-    const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    const startDay = getFirstDayOfMonth(currentYear, currentMonth); // 0 = Sun
-    const days = [];
-    
-    for (let i = 0; i < startDay; i++) {
-      days.push(<div key={`empty-${i}`} className="aspect-square"></div>);
-    }
-
-    const todayStr = formatDateKey(new Date());
-
-    for (let i = 1; i <= daysInMonth; i++) {
-      const date = new Date(currentYear, currentMonth, i);
-      const dateKey = formatDateKey(date);
-      const isSaved = savings[dateKey];
-      const hasExpense = expenses.some(e => e.date === dateKey);
-      const isToday = dateKey === todayStr;
-      
-      let statusClass = "bg-stone-50 text-stone-600 hover:bg-stone-100";
-      
-      if (type === 'savings') {
-        if (isSaved) statusClass = "bg-amber-700 text-white shadow-md"; 
-      } else {
-        if (hasExpense) statusClass = "bg-stone-200 text-stone-800 border-2 border-stone-300"; 
-      }
-
-      if (isToday) {
-        statusClass += " ring-2 ring-offset-2 ring-red-400"; 
-      }
-
-      days.push(
-        <button 
-          key={i} 
-          onClick={() => handleDateClick(i)}
-          className={`aspect-square rounded-2xl flex flex-col items-center justify-center text-sm font-medium transition-all duration-200 ${statusClass}`}
-        >
-          <span>{i}</span>
-          {type === 'savings' && isSaved && <span className="text-[9px] mt-0.5 opacity-80">✓</span>}
-          {type === 'expenses' && hasExpense && (
-             <div className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1"></div>
-          )}
-        </button>
-      );
-    }
-
-    return (
-      <div className="grid grid-cols-7 gap-2 mb-6">
-        {['일', '월', '화', '수', '목', '금', '토'].map(d => (
-          <div key={d} className="text-center text-xs font-bold text-stone-400 py-2">{d}</div>
-        ))}
-        {days}
-      </div>
-    );
-  };
-
-  // --- Main Render ---
-
+  // --- Render ---
   return (
     <div className="min-h-screen bg-[#F5F5F0] text-stone-800 font-sans selection:bg-amber-200">
       
@@ -743,7 +678,7 @@ export default function App() {
                        </div>
                     </div>
 
-                    {/* Method Chart (Smaller/Simple text summary) */}
+                    {/* Method Chart */}
                     <div className="bg-stone-50 p-4 rounded-2xl">
                        <h4 className="text-xs font-bold text-stone-500 mb-2">付款方式 (결제 수단)</h4>
                        {expenseMethodData.map(d => (
