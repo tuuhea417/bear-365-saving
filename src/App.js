@@ -123,9 +123,9 @@ const Modal = ({ isOpen, onClose, title, children }) => {
   );
 };
 
+// 【已修正】PieChart 元件：新增了單一數據 (100%) 時的渲染邏輯
 const SimplePieChart = ({ data }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
-  let currentAngle = 0;
   
   if (total === 0) return (
     <div className="flex items-center justify-center h-48 w-48 rounded-full bg-stone-100 mx-auto border-4 border-stone-50">
@@ -133,11 +133,25 @@ const SimplePieChart = ({ data }) => {
     </div>
   );
 
+  // 修正：如果只有一筆資料，或是該筆資料佔了 100%，直接畫一個圓，避免 SVG Path 360度畫不出來的問題
+  if (data.length === 1 || (data.length > 0 && data[0].value === total)) {
+     return (
+        <div className="relative h-48 w-48 mx-auto my-4">
+           <svg viewBox="0 0 100 100" className="w-full h-full">
+              <circle cx="50" cy="50" r="50" fill={data[0].color} stroke="white" strokeWidth="2" />
+           </svg>
+        </div>
+     )
+  }
+
+  // 正常的多區塊繪製邏輯
+  let currentAngle = 0;
   return (
     <div className="relative h-48 w-48 mx-auto my-4">
       <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
-        {data.map((item, index) => {
+        {data.map((item) => {
           const sliceAngle = (item.value / total) * 360;
+          
           const x1 = 50 + 50 * Math.cos(Math.PI * currentAngle / 180);
           const y1 = 50 + 50 * Math.sin(Math.PI * currentAngle / 180);
           const x2 = 50 + 50 * Math.cos(Math.PI * (currentAngle + sliceAngle) / 180);
@@ -755,6 +769,7 @@ export default function App() {
         {/* === SETTINGS VIEW === */}
         {activeTab === 'settings' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500">
+            {/* ... Settings Content ... */}
             <h2 className="text-2xl font-bold text-stone-800 mb-6 px-2">設定 (설정)</h2>
             
             <div className="bg-white rounded-3xl overflow-hidden shadow-sm divide-y divide-stone-50">
