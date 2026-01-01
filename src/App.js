@@ -6,8 +6,7 @@ import {
   GoogleAuthProvider, 
   signOut, 
   onAuthStateChanged,
-  signInAnonymously,
-  signInWithCustomToken
+  signInAnonymously
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -32,15 +31,34 @@ import {
   LogOut,
   X,
   AlertCircle,
-  Coffee // 新增咖啡圖標
+  Coffee
 } from 'lucide-react';
 
-// --- Firebase Configuration (Preview Mode) ---
-const firebaseConfig = JSON.parse(__firebase_config);
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// --- Firebase Configuration ---
+// 【重要】請將下方 apiKey 等內容替換成您在 Firebase Console 複製的資料
+// 請將雙引號 "" 內的文字換成您的資料
+const firebaseConfig = {
+  apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
+  authDomain: "bear365-e29e0.firebaseapp.com",
+  projectId: "bear365-e29e0",
+  storageBucket: "bear365-e29e0.firebasestorage.app",
+  messagingSenderId: "437697858004",
+  appId: "1:437697858004:web:bde1d75d18232ba1c56e41",
+  measurementId: "G-QYY8JFLL7J" 
+};
+
+// Initialize Firebase
+let app, auth, db;
+try {
+  app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
+} catch (e) {
+  console.error("Firebase 初始化失敗，請檢查 firebaseConfig 是否填寫正確。", e);
+}
+
+// 預設 App ID
+const appId = "bear-365-app";
 
 // --- Bible Verses (New Testament) ---
 const BIBLE_VERSES = [
@@ -201,11 +219,8 @@ export default function App() {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
+        // 如果沒有登入，嘗試匿名登入
+        await signInAnonymously(auth);
       } catch (error) {
         console.error("Auth Error:", error);
       }
@@ -290,8 +305,17 @@ export default function App() {
     return data.filter(d => d.value > 0);
   }, [monthlyExpenses]);
 
-  const handleGoogleLogin = async () => { alert("目前為預覽模式，資料將暫時同步到測試資料庫。請在 Vercel 部署成功後使用正式登入！"); };
-  const handleLogout = async () => { await signOut(auth); await signInAnonymously(auth); };
+  const handleGoogleLogin = async () => {
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login failed", error);
+      alert("登入失敗，請檢查 Firebase Console 的 Authentication 設定是否已啟用 Google 登入。");
+    }
+  };
+
+  const handleLogout = async () => { await signOut(auth); };
   const changeMonth = (delta) => { setCurrentDate(new Date(currentYear, currentMonth + delta, 1)); };
   const goToToday = () => { const now = new Date(); setCurrentDate(now); setSelectedDate(now); };
   function formatDateKey(date) { if (!date) return ''; const y = date.getFullYear(); const m = String(date.getMonth() + 1).padStart(2, '0'); const d = String(date.getDate()).padStart(2, '0'); return `${y}-${m}-${d}`; }
