@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// 【重要步驟】請將下方雙引號 "" 內的文字，換成您在 Firebase Console 複製的資料
+// 【重要】請將下方 apiKey 等內容替換成您在 Firebase Console 複製的資料
 const firebaseConfig = {
   apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
   authDomain: "bear365-e29e0.firebaseapp.com",
@@ -50,20 +50,23 @@ const firebaseConfig = {
 // Initialize Firebase
 let app, auth, db;
 try {
-  // 簡單檢查是否有填寫 Key，避免初始化報錯
   if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("請填入")) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
     
-    // 啟用離線儲存 (解決網路不穩或測試期資料庫鎖定時的資料讀取問題)
-    enableIndexedDbPersistence(db).catch((err) => {
-        if (err.code === 'failed-precondition') {
-            console.warn('多個分頁開啟導致離線儲存失敗');
-        } else if (err.code === 'unimplemented') {
-            console.warn('瀏覽器不支援離線儲存');
-        }
-    });
+    // 啟用離線持久化 (資料庫權限過期或斷網時，資料仍存於手機)
+    try {
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code === 'failed-precondition') {
+                console.warn('多個分頁開啟導致離線儲存失敗');
+            } else if (err.code === 'unimplemented') {
+                console.warn('瀏覽器不支援離線儲存');
+            }
+        });
+    } catch(e) {
+        // 忽略非關鍵錯誤
+    }
   }
 } catch (e) {
   console.error("Firebase 初始化失敗", e);
@@ -221,7 +224,7 @@ export default function App() {
   useEffect(() => {
     if (!auth) return;
     
-    // 嘗試從 LocalStorage 恢復資料
+    // 嘗試從 LocalStorage 恢復資料 (離線/未登入時的第一層防護)
     try {
         const localData = localStorage.getItem('bear365_backup');
         if (localData) {
@@ -255,7 +258,7 @@ export default function App() {
     const handleError = (error) => {
         console.error("DB Error:", error);
         if (error.code === 'permission-denied') {
-            alert("⚠️ 資料庫存取被拒絕。請檢查 Firebase Console 的 Rules 設定。");
+            alert("⚠️ 資料庫存取被拒絕。\n\n請檢查 Firebase Console -> Firestore -> Rules 設定是否已改為永久權限。\n\n目前將使用手機本機儲存模式。");
         }
     };
 
@@ -301,7 +304,6 @@ export default function App() {
     return () => clearTimeout(timeoutId);
   }, [savings, expenses, wishlist, goal, currency, user]);
 
-  // --- Calculations ---
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
   const yearSavings = useMemo(() => Object.entries(savings).reduce((acc, [dateStr, amount]) => dateStr.startsWith(currentYear.toString()) ? acc + Number(amount) : acc, 0), [savings, currentYear]);
@@ -527,7 +529,7 @@ export default function App() {
               <div className="flex justify-between items-end mb-5 relative z-10">
                 <div>
                   <label className="text-[10px] font-bold text-[#B09E90] uppercase tracking-widest block mb-2">
-                    연간 목표 (Annual Goal)
+                    연간目標 (Annual Goal)
                   </label>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-black text-[#6F4E37]">{formatCurrency(yearSavings, currency)}</span>
@@ -599,7 +601,7 @@ export default function App() {
           </div>
         )}
 
-        {/* === WISHLIST VIEW === */}
+        {/* === WISHLIST VIEW (已恢復) === */}
         {activeTab === 'wishlist' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 pb-20 space-y-6">
             <div className="flex justify-between items-end px-2">
@@ -650,7 +652,7 @@ export default function App() {
           </div>
         )}
 
-        {/* === EXPENSE VIEW === */}
+        {/* === EXPENSE VIEW (已恢復) === */}
         {activeTab === 'expenses' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 space-y-6">
              <div className="bg-white p-6 rounded-[40px] shadow-sm border border-[#F3E5D8]">
@@ -699,12 +701,13 @@ export default function App() {
           </div>
         )}
 
-        {/* === SETTINGS VIEW === */}
+        {/* === SETTINGS VIEW (已恢復) === */}
         {activeTab === 'settings' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-black text-[#5D4037] mb-6 px-2">設定 (설정)</h2>
             
             <div className="bg-white rounded-[32px] overflow-hidden shadow-sm border border-[#F3E5D8] divide-y divide-[#F7F2EB]">
+               {/* Currency */}
                <div className="p-6 flex justify-between items-center">
                  <span className="text-[#5D4037] font-bold">貨幣選擇 (통화 선택)</span>
                  <select 
@@ -720,6 +723,7 @@ export default function App() {
                  </select>
                </div>
 
+               {/* Data Import/Export */}
                <div className="p-6">
                  <span className="text-[#5D4037] font-bold block mb-4">數據匯入與匯出 (Excel CSV)</span>
                  <div className="flex gap-4">
@@ -738,6 +742,7 @@ export default function App() {
                  </p>
                </div>
 
+               {/* Account */}
                <div className="p-6">
                  <span className="text-[#5D4037] font-bold block mb-4">帳號 (계정)</span>
                  {user ? (
@@ -773,49 +778,212 @@ export default function App() {
 
       </div>
 
+      {/* --- BOTTOM NAVIGATION --- */}
+      <div className="fixed bottom-0 left-0 right-0 bg-[#FEFBF5]/90 backdrop-blur-xl border-t border-[#E6DCC3] px-6 pb-8 pt-3 z-40 rounded-t-[32px] shadow-[0_-10px_40px_rgba(0,0,0,0.02)]">
+        <div className="flex justify-between items-center max-w-lg mx-auto">
+          <div className="flex-1">
+             <TabButton 
+               active={activeTab === 'savings'} 
+               onClick={() => setActiveTab('savings')} 
+               icon={CalendarIcon} 
+               label="儲蓄" 
+             />
+          </div>
+          <div className="flex-1">
+             <TabButton 
+               active={activeTab === 'wishlist'} 
+               onClick={() => setActiveTab('wishlist')} 
+               icon={Heart} 
+               label="願望" 
+             />
+          </div>
+          <div className="flex-1">
+             <TabButton 
+               active={activeTab === 'expenses'} 
+               onClick={() => setActiveTab('expenses')} 
+               icon={PieChart} 
+               label="消費" 
+             />
+          </div>
+          <div className="flex-1">
+             <TabButton 
+               active={activeTab === 'settings'} 
+               onClick={() => setActiveTab('settings')} 
+               icon={Settings} 
+               label="設定" 
+             />
+          </div>
+        </div>
+      </div>
+
       {/* --- MODALS --- */}
-      <Modal isOpen={showSavingsModal} onClose={() => setShowSavingsModal(false)} title={`${selectedDate?.getMonth()+1}월 ${selectedDate?.getDate()}일 儲蓄`}>
+
+      {/* 1. Savings Modal */}
+      <Modal 
+        isOpen={showSavingsModal} 
+        onClose={() => setShowSavingsModal(false)}
+        title={`${selectedDate?.getMonth()+1}월 ${selectedDate?.getDate()}일 儲蓄`}
+      >
         <div className="text-center">
           <p className="text-[#9C826B] mb-8 font-medium">今日要存錢嗎？ (오늘 저축하시겠습니까?)</p>
           <div className="relative mb-8">
             <span className="absolute left-6 top-1/2 -translate-y-1/2 text-[#B09E90] font-bold text-xl">₩</span>
-            <input type="number" placeholder="0" value={tempAmount} onChange={(e) => setTempAmount(e.target.value)} className="w-full bg-[#F7F2EB] rounded-[24px] py-6 pl-12 pr-12 text-3xl font-black text-[#5D4037] outline-none focus:ring-4 focus:ring-[#E6DCC3] transition text-center placeholder-[#DCCAC0]" autoFocus />
-            {tempAmount && <button onClick={() => setTempAmount('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-[#DCCAC0] hover:text-[#9C826B]"><X size={24} /></button>}
+            <input 
+              type="number" 
+              placeholder="0" 
+              value={tempAmount}
+              onChange={(e) => setTempAmount(e.target.value)}
+              className="w-full bg-[#F7F2EB] rounded-[24px] py-6 pl-12 pr-12 text-3xl font-black text-[#5D4037] outline-none focus:ring-4 focus:ring-[#E6DCC3] transition text-center placeholder-[#DCCAC0]"
+              autoFocus
+            />
+            {tempAmount && (
+               <button onClick={() => setTempAmount('')} className="absolute right-6 top-1/2 -translate-y-1/2 text-[#DCCAC0] hover:text-[#9C826B]">
+                 <X size={24} />
+               </button>
+            )}
           </div>
-          <button onClick={saveMoney} className="w-full bg-[#8B5E3C] text-[#FFF8E7] py-5 rounded-[24px] font-black text-lg hover:bg-[#6F4E37] hover:shadow-lg hover:-translate-y-0.5 transition shadow-md shadow-[#8B5E3C]/30">確定存錢 (저축하기)</button>
+          <button 
+            onClick={saveMoney}
+            className="w-full bg-[#8B5E3C] text-[#FFF8E7] py-5 rounded-[24px] font-black text-lg hover:bg-[#6F4E37] hover:shadow-lg hover:-translate-y-0.5 transition shadow-md shadow-[#8B5E3C]/30"
+          >
+            確定存錢 (저축하기)
+          </button>
         </div>
       </Modal>
 
-      <Modal isOpen={showWishlistModal} onClose={() => setShowWishlistModal(false)} title="新增願望 (위시리스트 추가)">
+      {/* 2. Wishlist Modal */}
+      <Modal
+        isOpen={showWishlistModal}
+        onClose={() => setShowWishlistModal(false)}
+        title="新增願望 (위시리스트 추가)"
+      >
         <div className="space-y-5">
+           {/* Image Upload */}
            <div className="flex justify-center">
               <label className="w-28 h-28 bg-[#F7F2EB] rounded-[24px] flex flex-col items-center justify-center cursor-pointer hover:bg-[#E6DCC3] transition border-2 border-dashed border-[#DCCAC0] overflow-hidden relative group">
-                 {tempWish.image ? <img src={tempWish.image} alt="Preview" className="w-full h-full object-cover" /> : <><Camera size={28} className="text-[#B09E90] mb-1 group-hover:scale-110 transition" /><span className="text-[10px] text-[#9C826B] font-bold">Photo</span></>}
+                 {tempWish.image ? (
+                   <img src={tempWish.image} alt="Preview" className="w-full h-full object-cover" />
+                 ) : (
+                   <>
+                     <Camera size={28} className="text-[#B09E90] mb-1 group-hover:scale-110 transition" />
+                     <span className="text-[10px] text-[#9C826B] font-bold">Photo</span>
+                   </>
+                 )}
                  <input type="file" className="hidden" accept="image/*" onChange={handleImageUpload} />
               </label>
            </div>
-           <input type="text" placeholder="品名 (상품명)" value={tempWish.name} onChange={e => setTempWish({...tempWish, name: e.target.value})} className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition" />
-           <div className="relative"><input type="number" placeholder="金額 (금액)" value={tempWish.price} onChange={e => setTempWish({...tempWish, price: e.target.value})} className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition" />{tempWish.price && <button onClick={() => setTempWish({...tempWish, price: ''})} className="absolute right-4 top-4 text-[#DCCAC0]"><X size={18}/></button>}</div>
-           <input type="text" placeholder="購買平台 (구매처)" value={tempWish.platform} onChange={e => setTempWish({...tempWish, platform: e.target.value})} className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition" />
-           <button onClick={addWishItem} className="w-full bg-[#4A3B32] text-[#FFF8E7] py-4 rounded-2xl font-bold mt-2 shadow-md shadow-[#4A3B32]/20 hover:bg-[#3E2F28] transition">新增 (추가)</button>
+           
+           <input 
+             type="text" placeholder="品名 (상품명)" 
+             value={tempWish.name} onChange={e => setTempWish({...tempWish, name: e.target.value})}
+             className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition"
+           />
+           <div className="relative">
+             <input 
+               type="number" placeholder="金額 (금액)" 
+               value={tempWish.price} onChange={e => setTempWish({...tempWish, price: e.target.value})}
+               className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition"
+             />
+             {tempWish.price && <button onClick={() => setTempWish({...tempWish, price: ''})} className="absolute right-4 top-4 text-[#DCCAC0]"><X size={18}/></button>}
+           </div>
+           <input 
+             type="text" placeholder="購買平台 (구매처)" 
+             value={tempWish.platform} onChange={e => setTempWish({...tempWish, platform: e.target.value})}
+             className="w-full p-4 bg-[#F7F2EB] rounded-2xl outline-none text-[#5D4037] font-bold placeholder-[#B09E90] focus:ring-2 focus:ring-[#E6DCC3] transition"
+           />
+           <button onClick={addWishItem} className="w-full bg-[#4A3B32] text-[#FFF8E7] py-4 rounded-2xl font-bold mt-2 shadow-md shadow-[#4A3B32]/20 hover:bg-[#3E2F28] transition">
+             新增 (추가)
+           </button>
         </div>
       </Modal>
 
-      <Modal isOpen={showDayDetailModal} onClose={() => setShowDayDetailModal(false)} title={`${selectedDate?.getMonth()+1}월 ${selectedDate?.getDate()}일 消費 (소비)`}>
+      {/* 3. Expense Day Detail Modal (List + Add) */}
+      <Modal
+        isOpen={showDayDetailModal}
+        onClose={() => setShowDayDetailModal(false)}
+        title={`${selectedDate?.getMonth()+1}월 ${selectedDate?.getDate()}일 消費 (소비)`}
+      >
+        {/* List of items for this day */}
         <div className="mb-8 space-y-3">
-           {dailyExpenses.length === 0 ? <p className="text-center text-[#B09E90] text-sm py-6 bg-[#F7F2EB] rounded-2xl border border-dashed border-[#E6DCC3]">無消費紀錄 (기록 없음)</p> : dailyExpenses.map(item => (<div key={item.id} className="flex justify-between items-center p-4 bg-white rounded-2xl shadow-sm border border-[#F3E5D8]"><div className="flex items-center gap-4"><div className="w-2 h-8 rounded-full" style={{ background: EXPENSE_CATEGORIES.find(c => c.id === item.category)?.color }}></div><div><p className="font-bold text-[#5D4037] text-sm">{item.title}</p><p className="text-[10px] text-[#9C826B] font-medium mt-0.5">{EXPENSE_CATEGORIES.find(c => c.id === item.category)?.label}</p></div></div><div className="flex items-center gap-4"><span className="font-black text-[#5D4037]">{formatCurrency(item.amount, currency)}</span><button onClick={() => deleteExpense(item.id)} className="text-[#DCCAC0] hover:text-[#D08C8C] transition"><Trash2 size={16} /></button></div></div>))}
+           {dailyExpenses.length === 0 ? (
+             <p className="text-center text-[#B09E90] text-sm py-6 bg-[#F7F2EB] rounded-2xl border border-dashed border-[#E6DCC3]">無消費紀錄 (기록 없음)</p>
+           ) : (
+             dailyExpenses.map(item => (
+               <div key={item.id} className="flex justify-between items-center p-4 bg-white rounded-2xl shadow-sm border border-[#F3E5D8]">
+                 <div className="flex items-center gap-4">
+                    <div className="w-2 h-8 rounded-full" style={{ background: EXPENSE_CATEGORIES.find(c => c.id === item.category)?.color }}></div>
+                    <div>
+                      <p className="font-bold text-[#5D4037] text-sm">{item.title}</p>
+                      <p className="text-[10px] text-[#9C826B] font-medium mt-0.5">{EXPENSE_CATEGORIES.find(c => c.id === item.category)?.label}</p>
+                    </div>
+                 </div>
+                 <div className="flex items-center gap-4">
+                   <span className="font-black text-[#5D4037]">{formatCurrency(item.amount, currency)}</span>
+                   <button onClick={() => deleteExpense(item.id)} className="text-[#DCCAC0] hover:text-[#D08C8C] transition"><Trash2 size={16} /></button>
+                 </div>
+               </div>
+             ))
+           )}
         </div>
+
+        {/* Add New Form */}
         <div className="pt-6 border-t border-[#E6DCC3]">
            <h4 className="text-xs font-black text-[#B09E90] mb-4 uppercase tracking-wider">新增紀錄 (기록 추가)</h4>
            <div className="space-y-4">
-              <input type="text" placeholder="品名 (내용)" value={tempExpense.title} onChange={e => setTempExpense({...tempExpense, title: e.target.value})} className="w-full p-3.5 bg-[#F7F2EB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#E6DCC3] font-bold text-[#5D4037] placeholder-[#B09E90]" />
-              <div className="relative"><input type="number" placeholder="金額 (금액)" value={tempExpense.amount} onChange={e => setTempExpense({...tempExpense, amount: e.target.value})} className="w-full p-3.5 bg-[#F7F2EB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#E6DCC3] font-bold text-[#5D4037] placeholder-[#B09E90]" />{tempExpense.amount && <button onClick={() => setTempExpense({...tempExpense, amount: ''})} className="absolute right-4 top-3.5 text-[#DCCAC0]"><X size={16}/></button>}</div>
-              <div className="grid grid-cols-5 gap-2">{EXPENSE_CATEGORIES.map(cat => (<button key={cat.id} onClick={() => setTempExpense({...tempExpense, category: cat.id})} className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition ${tempExpense.category === cat.id ? 'bg-[#5D4037] text-[#FFF8E7] border-[#5D4037] shadow-md' : 'bg-white border-[#F3E5D8] text-[#9C826B] hover:bg-[#FFF8E7]'}`}><div className={`w-2.5 h-2.5 rounded-full mb-1.5 ${tempExpense.category === cat.id ? 'ring-2 ring-white/30' : ''}`} style={{background: cat.color}}></div><span className="text-[9px] font-bold whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">{cat.label.split(' ')[0]}</span></button>))}</div>
-              <div className="flex gap-3">{PAYMENT_METHODS.map(method => (<button key={method.id} onClick={() => setTempExpense({...tempExpense, method: method.id})} className={`flex-1 py-3 rounded-xl text-xs font-bold transition border ${tempExpense.method === method.id ? 'bg-[#E6D0BC] text-[#5D4037] border-[#D4A373]' : 'bg-[#F7F2EB] text-[#9C826B] border-transparent hover:bg-[#E6D0BC]/50'}`}>{method.label}</button>))}</div>
-              <button onClick={addExpense} className="w-full bg-[#4A3B32] text-[#FFF8E7] py-4 rounded-xl font-bold text-sm hover:bg-[#3E2F28] transition shadow-md shadow-[#4A3B32]/20 mt-2">加入 (추가)</button>
+              <input 
+                 type="text" placeholder="品名 (내용)" 
+                 value={tempExpense.title} onChange={e => setTempExpense({...tempExpense, title: e.target.value})}
+                 className="w-full p-3.5 bg-[#F7F2EB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#E6DCC3] font-bold text-[#5D4037] placeholder-[#B09E90]"
+              />
+              <div className="relative">
+                <input 
+                   type="number" placeholder="金額 (금액)" 
+                   value={tempExpense.amount} onChange={e => setTempExpense({...tempExpense, amount: e.target.value})}
+                   className="w-full p-3.5 bg-[#F7F2EB] rounded-xl text-sm outline-none focus:ring-2 focus:ring-[#E6DCC3] font-bold text-[#5D4037] placeholder-[#B09E90]"
+                />
+                 {tempExpense.amount && <button onClick={() => setTempExpense({...tempExpense, amount: ''})} className="absolute right-4 top-3.5 text-[#DCCAC0]"><X size={16}/></button>}
+              </div>
+
+              {/* Category Select */}
+              <div className="grid grid-cols-5 gap-2">
+                {EXPENSE_CATEGORIES.map(cat => (
+                  <button 
+                    key={cat.id}
+                    onClick={() => setTempExpense({...tempExpense, category: cat.id})}
+                    className={`flex flex-col items-center justify-center p-2 rounded-xl border-2 transition ${
+                      tempExpense.category === cat.id ? 'bg-[#5D4037] text-[#FFF8E7] border-[#5D4037] shadow-md' : 'bg-white border-[#F3E5D8] text-[#9C826B] hover:bg-[#FFF8E7]'
+                    }`}
+                  >
+                    <div className={`w-2.5 h-2.5 rounded-full mb-1.5 ${tempExpense.category === cat.id ? 'ring-2 ring-white/30' : ''}`} style={{background: cat.color}}></div>
+                    <span className="text-[9px] font-bold whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">{cat.label.split(' ')[0]}</span>
+                  </button>
+                ))}
+              </div>
+              
+              {/* Method Select */}
+              <div className="flex gap-3">
+                 {PAYMENT_METHODS.map(method => (
+                   <button
+                     key={method.id}
+                     onClick={() => setTempExpense({...tempExpense, method: method.id})}
+                     className={`flex-1 py-3 rounded-xl text-xs font-bold transition border ${
+                       tempExpense.method === method.id 
+                       ? 'bg-[#E6D0BC] text-[#5D4037] border-[#D4A373]' 
+                       : 'bg-[#F7F2EB] text-[#9C826B] border-transparent hover:bg-[#E6D0BC]/50'
+                     }`}
+                   >
+                     {method.label}
+                   </button>
+                 ))}
+              </div>
+
+              <button onClick={addExpense} className="w-full bg-[#4A3B32] text-[#FFF8E7] py-4 rounded-xl font-bold text-sm hover:bg-[#3E2F28] transition shadow-md shadow-[#4A3B32]/20 mt-2">
+                加入 (추가)
+              </button>
            </div>
         </div>
       </Modal>
+
     </div>
   );
 }
