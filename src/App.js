@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 
 // --- Firebase Configuration ---
-// 【重要】請將下方 apiKey 等內容替換成您在 Firebase Console 複製的資料
+// 【重要步驟】請將下方雙引號 "" 內的文字，換成您在 Firebase Console 複製的資料
 const firebaseConfig = {
   apiKey: "AIzaSyCOX0pW4-QlHxwBN79yFrCkHhF4RClnRUg",
   authDomain: "bear365-e29e0.firebaseapp.com",
@@ -50,31 +50,28 @@ const firebaseConfig = {
 // Initialize Firebase
 let app, auth, db;
 try {
+  // 檢查是否已填寫設定，避免初始化錯誤
   if (firebaseConfig.apiKey && !firebaseConfig.apiKey.includes("請填入")) {
     app = initializeApp(firebaseConfig);
     auth = getAuth(app);
     db = getFirestore(app);
     
-    // 啟用離線持久化 (資料庫權限過期或斷網時，資料仍存於手機)
-    try {
-        enableIndexedDbPersistence(db).catch((err) => {
-            if (err.code === 'failed-precondition') {
-                console.warn('多個分頁開啟導致離線儲存失敗');
-            } else if (err.code === 'unimplemented') {
-                console.warn('瀏覽器不支援離線儲存');
-            }
-        });
-    } catch(e) {
-        // 忽略非關鍵錯誤
-    }
+    // 啟用離線儲存 (解決網路不穩或測試期資料庫鎖定時的資料讀取問題)
+    enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+            console.warn('多個分頁開啟導致離線儲存失敗');
+        } else if (err.code === 'unimplemented') {
+            console.warn('瀏覽器不支援離線儲存');
+        }
+    });
   }
 } catch (e) {
-  console.error("Firebase 初始化失敗", e);
+  console.error("Firebase 初始化失敗，請檢查 firebaseConfig 是否填寫正確。", e);
 }
 
 const appId = "bear-365-app";
 
-// --- Bible Verses ---
+// --- Bible Verses (New Testament) ---
 const BIBLE_VERSES = [
   { text: "我靠著那加給我力量的，凡事都能做。", ref: "腓立比書 4:13" },
   { text: "應當一無掛慮，只要凡事藉著禱告、祈求，和感謝，將你們所要的告訴神。", ref: "腓立比書 4:6" },
@@ -105,20 +102,22 @@ const formatCurrency = (amount, currency = 'KRW') => {
   }
 };
 
+// 咖啡廳風格配色
 const EXPENSE_CATEGORIES = [
-  { id: 'food', label: '飲食 (식사)', color: '#D4A373' }, 
-  { id: 'transport', label: '交通 (교통)', color: '#CCD5AE' }, 
-  { id: 'medical', label: '醫療 (의료)', color: '#E9EDC9' }, 
-  { id: 'entertainment', label: '娛樂 (오락)', color: '#FAEDCD' }, 
-  { id: 'other', label: '其他 (기타)', color: '#A98467' }, 
+  { id: 'food', label: '飲食 (식사)', color: '#D4A373' }, // Latte Color
+  { id: 'transport', label: '交通 (교통)', color: '#CCD5AE' }, // Matcha
+  { id: 'medical', label: '醫療 (의료)', color: '#E9EDC9' }, // Light Matcha
+  { id: 'entertainment', label: '娛樂 (오락)', color: '#FAEDCD' }, // Cream
+  { id: 'other', label: '其他 (기타)', color: '#A98467' }, // Dark Roast
 ];
 
 const PAYMENT_METHODS = [
-  { id: 'cash', label: '現金 (현금)', color: '#6F4E37' }, 
-  { id: 'card', label: '刷卡 (카드)', color: '#B5838D' }, 
+  { id: 'cash', label: '現金 (현금)', color: '#6F4E37' }, // Coffee Bean
+  { id: 'card', label: '刷卡 (카드)', color: '#B5838D' }, // Berry
 ];
 
-// --- Components ---
+// --- Sub-Components ---
+
 const Modal = ({ isOpen, onClose, title, children }) => {
   if (!isOpen) return null;
   return (
@@ -163,14 +162,24 @@ const SimplePieChart = ({ data }) => {
       <svg viewBox="0 0 100 100" className="transform -rotate-90 w-full h-full">
         {data.map((item) => {
           const sliceAngle = (item.value / total) * 360;
+          
           const x1 = 50 + 50 * Math.cos(Math.PI * currentAngle / 180);
           const y1 = 50 + 50 * Math.sin(Math.PI * currentAngle / 180);
           const x2 = 50 + 50 * Math.cos(Math.PI * (currentAngle + sliceAngle) / 180);
           const y2 = 50 + 50 * Math.sin(Math.PI * (currentAngle + sliceAngle) / 180);
+          
           const largeArc = sliceAngle > 180 ? 1 : 0;
+          
           const pathData = `M 50 50 L ${x1} ${y1} A 50 50 0 ${largeArc} 1 ${x2} ${y2} Z`;
+          
           const path = (
-            <path key={item.name} d={pathData} fill={item.color} stroke="#FEFBF5" strokeWidth="3" />
+            <path
+              key={item.name}
+              d={pathData}
+              fill={item.color}
+              stroke="#FEFBF5"
+              strokeWidth="3"
+            />
           );
           currentAngle += sliceAngle;
           return path;
@@ -194,8 +203,9 @@ const TabButton = ({ active, onClick, icon: Icon, label }) => (
   </button>
 );
 
-// --- MAIN APP ---
+// --- MAIN APP COMPONENT ---
 export default function App() {
+  // State
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('savings');
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -239,6 +249,7 @@ export default function App() {
 
     const initAuth = async () => {
       try {
+        // 如果使用者還沒登入，先用匿名身分，確保 App 能動
         if (!auth.currentUser) {
             await signInAnonymously(auth);
         }
@@ -251,14 +262,15 @@ export default function App() {
     return onAuthStateChanged(auth, setUser);
   }, []);
 
-  // Sync Data
+  // Sync: Firestore (Cloud) + LocalStorage (Backup)
   useEffect(() => {
     if (!user || !db) return;
     
+    // 定義錯誤處理：如果資料庫權限過期，跳出警告
     const handleError = (error) => {
         console.error("DB Error:", error);
         if (error.code === 'permission-denied') {
-            alert("⚠️ 資料庫存取被拒絕。\n\n請檢查 Firebase Console -> Firestore -> Rules 設定是否已改為永久權限。\n\n目前將使用手機本機儲存模式。");
+            alert("⚠️ 請注意：資料庫存取被拒絕\n\n這通常是因為 Firebase 的「測試模式 30 天」到期了。\n\n即使您登入了 Google 帳號，也需要去 Firebase Console -> Firestore -> Rules 修改規則。\n\n目前 App 會暫時讀取您手機上的舊資料。");
         }
     };
 
@@ -267,6 +279,7 @@ export default function App() {
     const wishlistRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'wishlist');
     const settingsRef = doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'settings');
 
+    // 即時監聽雲端資料
     const unsubSavings = onSnapshot(savingsRef, (doc) => { if (doc.exists()) setSavings(doc.data().data || {}); }, handleError);
     const unsubExpenses = onSnapshot(expensesRef, (doc) => { if (doc.exists()) setExpenses(doc.data().data || []); }, handleError);
     const unsubWishlist = onSnapshot(wishlistRef, (doc) => { if (doc.exists()) setWishlist(doc.data().data || []); }, handleError);
@@ -281,16 +294,16 @@ export default function App() {
     return () => { unsubSavings(); unsubExpenses(); unsubWishlist(); unsubSettings(); };
   }, [user]);
 
-  // Save Data
+  // Save Data Trigger
   const isFirstRender = useRef(true);
   useEffect(() => {
     if (isFirstRender.current) { isFirstRender.current = false; return; }
     
-    // Backup to LocalStorage
+    // 1. 無論如何，每次變更都存一份到 LocalStorage (手機本機)
     const backupData = { savings, expenses, wishlist, goal, currency, timestamp: Date.now() };
     localStorage.setItem('bear365_backup', JSON.stringify(backupData));
 
-    // Save to Cloud
+    // 2. 存到 Cloud (Firebase)
     if (!user || !db) return;
     const saveData = async () => {
       try {
@@ -298,14 +311,18 @@ export default function App() {
         await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'expenses'), { data: expenses }, { merge: true });
         await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'wishlist'), { data: wishlist }, { merge: true });
         await setDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'data', 'settings'), { goal, currency }, { merge: true });
-      } catch (e) {}
+      } catch (e) { 
+          // 這裡不再報錯，因為我們已經有 LocalStorage 備份了
+      }
     };
     const timeoutId = setTimeout(saveData, 1000);
     return () => clearTimeout(timeoutId);
   }, [savings, expenses, wishlist, goal, currency, user]);
 
+  // --- Calculations ---
   const currentYear = currentDate.getFullYear();
   const currentMonth = currentDate.getMonth();
+  
   const yearSavings = useMemo(() => Object.entries(savings).reduce((acc, [dateStr, amount]) => dateStr.startsWith(currentYear.toString()) ? acc + Number(amount) : acc, 0), [savings, currentYear]);
   const progressPercentage = Math.min(100, Math.max(0, (yearSavings / goal) * 100));
   const wishlistTotal = useMemo(() => wishlist.reduce((acc, item) => acc + Number(item.price), 0), [wishlist]);
@@ -339,6 +356,8 @@ export default function App() {
     return data.filter(d => d.value > 0);
   }, [monthlyExpenses]);
 
+  // --- Actions ---
+
   const handleGoogleLogin = async () => {
     if (!auth || !firebaseConfig.apiKey || firebaseConfig.apiKey.includes("請填入")) {
       alert("⚠️ 請先在程式碼中填入 Firebase 設定");
@@ -349,7 +368,7 @@ export default function App() {
       await signInWithPopup(auth, provider);
     } catch (error) {
       if (error.code === 'auth/unauthorized-domain') {
-        alert(`🚫 網域未授權：請到 Firebase Console 加入 ${window.location.hostname}`);
+        alert(`🚫 網域未授權：\n您的網址 (${window.location.hostname}) 尚未加入 Firebase 白名單。\n\n請到 Firebase Console -> Authentication -> Settings -> Authorized domains\n加入此網址。`);
       } else {
         alert(`登入失敗: ${error.message}`);
       }
@@ -421,6 +440,8 @@ export default function App() {
 
   const getRandomVerse = () => { const randomIndex = Math.floor(Math.random() * BIBLE_VERSES.length); setBibleVerse(BIBLE_VERSES[randomIndex]); };
 
+  // --- Render Helpers ---
+  
   const renderCalendar = (type) => {
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
     const startDay = getFirstDayOfMonth(currentYear, currentMonth);
@@ -435,16 +456,17 @@ export default function App() {
       const hasExpense = expenses.some(e => e.date === dateKey);
       const isToday = dateKey === todayStr;
       
-      let statusClass = "bg-[#F7F2EB] text-[#8D7666] hover:bg-[#E6D0BC]"; 
+      // 優化日曆樣式：更柔和的背景與圓角
+      let statusClass = "bg-[#F7F2EB] text-[#8D7666] hover:bg-[#E6D0BC]"; // 預設：奶油色背景
       
       if (type === 'savings') {
-        if (isSaved) statusClass = "bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/30"; 
+        if (isSaved) statusClass = "bg-[#8B5E3C] text-white shadow-md shadow-[#8B5E3C]/30"; // 存錢：深咖啡色
       } else {
-        if (hasExpense) statusClass = "bg-[#D4A373] text-white shadow-md shadow-[#D4A373]/30"; 
+        if (hasExpense) statusClass = "bg-[#D4A373] text-white shadow-md shadow-[#D4A373]/30"; // 消費：焦糖色
       }
 
       if (isToday) {
-        statusClass += " ring-2 ring-offset-2 ring-offset-[#FEFBF5] ring-[#BC6C25]"; 
+        statusClass += " ring-2 ring-offset-2 ring-offset-[#FEFBF5] ring-[#BC6C25]"; // 今天：邊框強調
       }
 
       days.push(
@@ -472,8 +494,11 @@ export default function App() {
     );
   };
 
+  // --- Render ---
   return (
+    // 背景改為溫暖的米色
     <div className="min-h-screen bg-[#FEFBF5] text-[#433422] font-sans selection:bg-[#E6D0BC] selection:text-[#433422] pb-24">
+      
       {/* Top Header */}
       <div className="pt-12 pb-8 px-6 bg-[#FFF8E7] rounded-b-[48px] shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative z-10 border-b border-[#F3E5D8]">
         <div className="flex justify-between items-center mb-6">
@@ -529,7 +554,7 @@ export default function App() {
               <div className="flex justify-between items-end mb-5 relative z-10">
                 <div>
                   <label className="text-[10px] font-bold text-[#B09E90] uppercase tracking-widest block mb-2">
-                    연간目標 (Annual Goal)
+                    연간 목표 (Annual Goal)
                   </label>
                   <div className="flex items-baseline gap-2">
                     <span className="text-3xl font-black text-[#6F4E37]">{formatCurrency(yearSavings, currency)}</span>
@@ -549,6 +574,7 @@ export default function App() {
                 </div>
               </div>
               
+              {/* Progress Bar */}
               <div className="h-4 bg-[#F7F2EB] rounded-full overflow-hidden shadow-inner">
                 <div 
                   className="h-full bg-gradient-to-r from-[#D4A373] to-[#8B5E3C] rounded-full transition-all duration-1000 ease-out shadow-[0_2px_10px_rgba(139,94,60,0.3)]"
@@ -560,6 +586,7 @@ export default function App() {
               </p>
             </div>
 
+            {/* Wishlist Link Button */}
             <div className="flex items-center justify-between bg-white p-5 rounded-[32px] shadow-sm cursor-pointer hover:shadow-md hover:bg-[#FAFAF5] transition border border-[#F3E5D8] group" onClick={() => setActiveTab('wishlist')}>
                <div className="flex items-center gap-4">
                  <div className="p-3 bg-[#FFE5D9] text-[#E07A5F] rounded-2xl group-hover:scale-110 transition">
@@ -573,6 +600,7 @@ export default function App() {
                <ChevronRight size={20} className="text-[#DCCAC0]" />
             </div>
 
+            {/* Calendar */}
             <div className="bg-white p-6 rounded-[40px] shadow-sm border border-[#F3E5D8]">
                <div className="flex justify-between items-center mb-6 px-2">
                  <h3 className="font-bold text-[#5D4037] flex items-center gap-2">
@@ -583,6 +611,7 @@ export default function App() {
                {renderCalendar('savings')}
             </div>
 
+            {/* Bible Verse */}
             <div className="mt-8 text-center px-6 relative">
                <div className="w-12 h-1.5 bg-[#E6DCC3] rounded-full mx-auto mb-6 opacity-50"></div>
                <p className="text-sm text-[#6F4E37] leading-relaxed font-medium tracking-wide">
@@ -601,7 +630,7 @@ export default function App() {
           </div>
         )}
 
-        {/* === WISHLIST VIEW (已恢復) === */}
+        {/* === WISHLIST VIEW === */}
         {activeTab === 'wishlist' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 pb-20 space-y-6">
             <div className="flex justify-between items-end px-2">
@@ -652,7 +681,7 @@ export default function App() {
           </div>
         )}
 
-        {/* === EXPENSE VIEW (已恢復) === */}
+        {/* === EXPENSE VIEW === */}
         {activeTab === 'expenses' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500 space-y-6">
              <div className="bg-white p-6 rounded-[40px] shadow-sm border border-[#F3E5D8]">
@@ -701,7 +730,7 @@ export default function App() {
           </div>
         )}
 
-        {/* === SETTINGS VIEW (已恢復) === */}
+        {/* === SETTINGS VIEW === */}
         {activeTab === 'settings' && (
           <div className="animate-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-2xl font-black text-[#5D4037] mb-6 px-2">設定 (설정)</h2>
@@ -749,7 +778,7 @@ export default function App() {
                    <div className="space-y-4">
                      <div className="flex items-center justify-between bg-[#FAFAF5] p-3 rounded-2xl border border-[#F3E5D8]">
                        <div className="flex items-center gap-3">
-                          <img src={user.photoURL || "https://ui-avatars.com/api/?name=Bear&background=random"} alt="User" className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
+                          <img src={user.photoURL || "https://ui-avatars.com/api/?name=Bear&background=random&color=6F4E37"} alt="User" className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
                           <div>
                             <p className="text-sm font-bold text-[#5D4037]">{user.isAnonymous ? 'Guest User' : user.displayName}</p>
                             <p className="text-xs text-[#9C826B]">{user.isAnonymous ? 'Preview Mode' : user.email}</p>
